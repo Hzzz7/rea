@@ -1,0 +1,36 @@
+name: Sync upstream
+
+# 定时把上游 morluto/rea 的 main 同步到本 fork。
+# 上游经常修改 .github/workflows，默认 GITHUB_TOKEN 无权推送这类改动，
+# 需要在仓库 Secrets 中配置 SYNC_TOKEN（勾选 repo + workflow 权限的 PAT）。
+
+on:
+  schedule:
+    - cron: "17 */6 * * *"   # 每 6 小时一次（UTC）
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-upstream
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    if: github.repository == 'Hzzz7/rea'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Sync main with upstream
+        env:
+          GH_TOKEN: ${{ secrets.SYNC_TOKEN || secrets.GITHUB_TOKEN }}
+          HAS_SYNC_TOKEN: ${{ secrets.SYNC_TOKEN != '' }}
+        run: |
+          if [ "$HAS_SYNC_TOKEN" != "true" ]; then
+            echo "::warning::未配置 SYNC_TOKEN，上游修改工作流文件时同步会失败"
+          fi
+          if ! gh api -X POST "repos/${GITHUB_REPOSITORY}/merge-upstream" -f branch=main; then
+            echo "::error::同步失败：可能是与上游冲突，或缺少 workflow 权限（请配置 SYNC_TOKEN）"
+            exit 1
+          fi
